@@ -2,10 +2,11 @@
 import { ref } from 'vue'
 
 const tickerPlaceholder = 'Введите тикер'
+const minHeightBar = 5;
 const tickerName = ref('')
 const sel = ref(null)
+const graph = ref(null);
 let id = 0
-let requestInterval = null
 
 const tickers = ref([])
 
@@ -14,28 +15,18 @@ const getPrice = async (fsymName) => {
     `https://min-api.cryptocompare.com/data/price?fsym=${fsymName}&tsyms=USD`
   )
   const result = await response.json()
-  const value = result['USD']
+  const value = result.USD
   return value > 1 ? value.toFixed(2) : value.toPrecision(2)
 }
 
-const normalizeGraph = (graphs) => {
-  const minValue = Math.min(...graphs)
-  const maxValue = Math.max(...graphs)
-  const r = graphs.map((value) => {
-    console.log(value, minValue, maxValue)
-    return ((Number(value) - minValue) / (maxValue - minValue)) * 100
-  })
-  return r
-}
+const normalizeGraph = () => {
+  const minValue = Math.min(...graph.value)
+  const maxValue = Math.max(...graph.value)
 
-const startingRequest = () => {
-  requestInterval = setInterval(() => {
-    tickers.value.map(async (item) => {
-      const currentPrice = await getPrice(item.name)
-      item.value = currentPrice
-      item.graph.push(currentPrice)
-    })
-  }, 3000)
+  return graph.value.map((value) => {
+    const result = 5 + (value - minValue) / (maxValue - minValue) * 95;
+    return isNaN(result) ? minHeightBar : result
+  })
 }
 
 const addTicker = async () => {
@@ -45,21 +36,33 @@ const addTicker = async () => {
     name: tickerName.value,
     value: currentValue,
     id: id++,
-    graph: [30000, 31000]
+    graph: []
   }
 
   tickers.value.push(newTicher)
   tickerName.value = ''
+
+  setInterval(async () => {
+    const currentTicher = tickers.value.find((item) => item.name === newTicher.name)
+    const currentPrice = await getPrice(currentTicher.name)
+    currentTicher.value = currentPrice
+    currentTicher.graph.push(currentPrice)
+    
+    if (sel.value?.name === newTicher.name) {
+      graph.value.push(currentPrice);
+    }
+  }, 3000)
 }
 
 const removeTicker = (ticker) => (tickers.value = tickers.value.filter((item) => item !== ticker))
 
 const select = (ticker) => {
+  graph.value = [];
   sel.value = ticker
-  console.log(ticker);
-  sel.value.graph = normalizeGraph(ticker.graph)
-  console.log(sel.value)
-  if (!requestInterval) startingRequest()
+}
+
+const removeSel = () => {
+  sel.value = null;
 }
 </script>
 
@@ -177,13 +180,13 @@ const select = (ticker) => {
           <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">{{ sel.name }} - USD</h3>
           <div class="flex items-end border-gray-600 border-b border-l h-64">
             <div
-              v-for="bar in sel.graph"
+              v-for="bar in normalizeGraph()"
               :key="bar.id"
               :style="{ height: bar + '%' }"
-              class="bg-purple-800 border w-10 h-24"
+              class="bg-purple-800 border w-10"
             ></div>
           </div>
-          <button @click="sel = null" type="button" class="absolute top-0 right-0">
+          <button @click="removeSel" type="button" class="absolute top-0 right-0">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               xmlns:xlink="http://www.w3.org/1999/xlink"
