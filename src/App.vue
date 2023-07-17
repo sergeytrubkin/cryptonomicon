@@ -1,14 +1,16 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 
 const tickerPlaceholder = 'Введите тикер'
 const minHeightBar = 5;
 const tickerName = ref('')
 const sel = ref(null)
 const graph = ref(null);
-let id = 0
-
 const tickers = ref([])
+let id = 0
+let coinsList = [];
+let coins = ref([]);
+let isError = false;
 
 const getPrice = async (fsymName) => {
   const response = await fetch(
@@ -17,6 +19,12 @@ const getPrice = async (fsymName) => {
   const result = await response.json()
   const value = result.USD
   return value > 1 ? value.toFixed(2) : value.toPrecision(2)
+}
+
+const getCoins = async () => {
+  const response = await fetch('https://min-api.cryptocompare.com/data/all/coinlist?summary=true')
+  const result = await response.json();
+  return result.Data
 }
 
 const normalizeGraph = () => {
@@ -30,6 +38,11 @@ const normalizeGraph = () => {
 }
 
 const addTicker = async () => {
+  if (tickers.value.filter((item) => item.name.toLowerCase() === tickerName.value.toLowerCase()).length > 0) {
+    isError = true;
+    return;
+  }
+  
   const currentValue = await getPrice(tickerName.value)
 
   const newTicher = {
@@ -64,6 +77,19 @@ const select = (ticker) => {
 const removeSel = () => {
   sel.value = null;
 }
+
+onMounted( async () => {
+  coinsList = await getCoins();
+})
+
+watch(tickerName, () => {
+  if (tickerName.value.length > 0) {
+    coins.value = Object.entries(coinsList).filter((item) => item[1].FullName.toLowerCase().search(tickerName.value.toLowerCase()) > -1).slice(0, 4);
+  } else {
+    coins.value = [];
+  }
+  isError = false;
+}) 
 </script>
 
 <template>
@@ -92,27 +118,15 @@ const removeSel = () => {
             </div>
             <div class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap">
               <span
+                v-for="coin, index in coins"
+                :key="index"
+                @click="tickerName = coin[1].Symbol"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
-                BTC
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                DOGE
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BCH
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                CHD
+                {{coin[1].Symbol}}
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div v-if="isError" class="text-sm text-red-600">Такой тикер уже добавлен</div>
           </div>
         </div>
         <button
