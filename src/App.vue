@@ -46,7 +46,7 @@ const addTicker = async () => {
   const currentValue = await getPrice(tickerName.value)
 
   const newTicher = {
-    name: tickerName.value,
+    name: tickerName.value.toUpperCase(),
     value: currentValue,
     id: id++,
     graph: []
@@ -55,15 +55,8 @@ const addTicker = async () => {
   tickers.value.push(newTicher)
   tickerName.value = ''
 
-  setInterval(async () => {
-    const currentTicher = tickers.value.find((item) => item.name === newTicher.name)
-    const currentPrice = await getPrice(currentTicher.name)
-    currentTicher.value = currentPrice
-    currentTicher.graph.push(currentPrice)
-    
-    if (sel.value?.name === newTicher.name) {
-      graph.value.push(currentPrice);
-    }
+  window.localStorage.setItem('tickers', JSON.stringify(tickers.value));
+  addUpdatePrice(newTicher.name);
   }, 3000)
 }
 
