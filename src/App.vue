@@ -1,14 +1,14 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue';
 
 const API_KEY = '1b48dde3374cb66b9a772f65ba4b5b1a11caa1bea6925e23de1f45f398f60019';
-const tickerPlaceholder = 'Введите тикер'
+const tickerPlaceholder = 'Введите тикер';
 const minHeightBar = 5;
-const tickerName = ref('')
-const sel = ref(null)
+const tickerName = ref('');
+const sel = ref(null);
 const graph = ref(null);
-const tickers = ref([])
-let id = 0
+const tickers = ref([]);
+let id = 0;
 let coinsList = [];
 let coins = ref([]);
 let isError = false;
@@ -16,47 +16,52 @@ let isError = false;
 const getPrice = async (fsymName) => {
   const response = await fetch(
     `https://min-api.cryptocompare.com/data/price?fsym=${fsymName}&tsyms=USD&api_key=${API_KEY}`
-  )
-  const result = await response.json()
-  const value = result.USD
-  return value > 1 ? value.toFixed(2) : value.toPrecision(2)
-}
+  );
+  const result = await response.json();
+  const value = result.USD;
+  return value > 1 ? value.toFixed(2) : value.toPrecision(2);
+};
 
 const getCoins = async () => {
-  const response = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=${API_KEY}`)
+  const response = await fetch(
+    `https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=${API_KEY}`
+  );
   const result = await response.json();
-  return result.Data
-}
+  return result.Data;
+};
 
 const normalizeGraph = () => {
-  const minValue = Math.min(...graph.value)
-  const maxValue = Math.max(...graph.value)
+  const minValue = Math.min(...graph.value);
+  const maxValue = Math.max(...graph.value);
 
   return graph.value.map((value) => {
-    const result = 5 + (value - minValue) / (maxValue - minValue) * 95;
-    return isNaN(result) ? minHeightBar : result
-  })
-}
+    const result = 5 + ((value - minValue) / (maxValue - minValue)) * 95;
+    return isNaN(result) ? minHeightBar : result;
+  });
+};
 
 const addUpdatePrice = (coinName) => {
   setInterval(async () => {
-    const currentTicher = tickers.value.find((item) => item.name === coinName)
-    const currentPrice = await getPrice(currentTicher.name)
-    currentTicher.value = currentPrice
-    currentTicher.graph.push(currentPrice)
-    
+    const currentTicher = tickers.value.find((item) => item.name === coinName);
+    const currentPrice = await getPrice(currentTicher.name);
+    currentTicher.value = currentPrice;
+    currentTicher.graph.push(currentPrice);
+
     if (sel.value?.name === coinName) {
       graph.value.push(currentPrice);
     }
-  }, 3000)
-}
+  }, 3000);
+};
 
 const addTicker = async () => {
-  if (tickers.value.filter((item) => item.name.toLowerCase() === tickerName.value.toLowerCase()).length > 0) {
+  if (
+    tickers.value.filter((item) => item.name.toLowerCase() === tickerName.value.toLowerCase())
+      .length > 0
+  ) {
     isError = true;
     return;
   }
-  
+
   const currentValue = await getPrice(tickerName.value.toUpperCase());
 
   const newTicher = {
@@ -64,50 +69,52 @@ const addTicker = async () => {
     value: currentValue,
     id: id++,
     graph: []
-  }
-  tickers.value.push(newTicher)
-  tickerName.value = ''
+  };
+  tickers.value.push(newTicher);
+  tickerName.value = '';
 
   window.localStorage.setItem('tickers', JSON.stringify(tickers.value));
   addUpdatePrice(newTicher.name);
-}
+};
 
 const removeTicker = (ticker) => {
-  (tickers.value = tickers.value.filter((item) => item !== ticker));
+  tickers.value = tickers.value.filter((item) => item !== ticker);
   window.localStorage.setItem('tickers', JSON.stringify(tickers.value));
-}
+};
 
 const select = (ticker) => {
   graph.value = [];
-  sel.value = ticker
-}
+  sel.value = ticker;
+};
 
 const inputCoint = (coinName) => {
   tickerName.value = coinName;
   addTicker();
-}
+};
 
 const removeSel = () => {
   sel.value = null;
-}
+};
 
-onMounted( async () => {
+onMounted(async () => {
   coinsList = await getCoins();
   tickers.value = JSON.parse(window.localStorage.getItem('tickers'));
   tickers.value.forEach((item) => {
     addUpdatePrice(item.name);
-  })
-})
+  });
+});
 
 watch(tickerName, () => {
   if (tickerName.value.length > 0) {
-    coins.value = Object.entries(coinsList).filter((item) => item[1].FullName.toLowerCase().search(tickerName.value.toLowerCase()) > -1).slice(0, 4);
+    coins.value = Object.entries(coinsList)
+      .filter((item) => item[1].FullName.toLowerCase().search(tickerName.value.toLowerCase()) > -1)
+      .slice(0, 4);
     isError = false;
   } else {
     coins.value = [];
     isError = false;
   }
-})
+});
 </script>
 
 <template>
@@ -134,14 +141,17 @@ watch(tickerName, () => {
                 class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
               />
             </div>
-            <div v-if="coins.length" class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap">
+            <div
+              v-if="coins.length"
+              class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
+            >
               <span
-                v-for="coin, index in coins"
+                v-for="(coin, index) in coins"
                 :key="index"
                 @click="inputCoint(coin[1].Symbol)"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
-                {{coin[1].Symbol}}
+                {{ coin[1].Symbol }}
               </span>
             </div>
             <div v-if="isError" class="text-sm text-red-600">Такой тикер уже добавлен</div>
