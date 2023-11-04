@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 
+const tickersCountOnPage = 6;
 const API_KEY = '1b48dde3374cb66b9a772f65ba4b5b1a11caa1bea6925e23de1f45f398f60019';
 const tickerPlaceholder = 'Введите тикер';
 const minHeightBar = 5;
@@ -8,9 +9,9 @@ const tickerName = ref('');
 const sel = ref(null);
 const graph = ref(null);
 const tickers = ref([]);
-const tickersCountOnPage = 6;
+const filter = ref('');
+let filteredTickers = ref([]);
 let page = ref(1);
-let filter = ref('');
 let id = 0;
 let coinsList = [];
 let coins = ref([]);
@@ -99,14 +100,13 @@ const removeSel = () => {
   sel.value = null;
 };
 
-const changeCurrentPage = () => {};
-
 onMounted(async () => {
   coinsList = await getCoins();
   tickers.value = JSON.parse(window.localStorage.getItem('tickers'));
   tickers.value.forEach((item) => {
     addUpdatePrice(item.name);
   });
+  filteredTickers.value = tickers.value;
 });
 
 watch(tickerName, () => {
@@ -121,7 +121,10 @@ watch(tickerName, () => {
   }
 });
 
-watch(page, () => console.log(tickers.value.length - tickersCountOnPage * page.value));
+watch(filter, () => {
+  const { value } = filter;
+  filteredTickers.value = tickers.value.filter((ticker) => ticker.name.toLowerCase().indexOf(value.trim().toLowerCase()) > -1);
+});
 </script>
 
 <template>
@@ -194,22 +197,25 @@ watch(page, () => console.log(tickers.value.length - tickersCountOnPage * page.v
             Назад
           </button>
           <button
-            v-if="tickers.length - tickersCountOnPage * page > 0"
+            v-if="filteredTickers.length - tickersCountOnPage * page > 0"
             @click="page++"
             class="my-4 mx-2 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
           >
             Вперёд
           </button>
           <br />
-          <input type="text" />
+          <input v-model="filter" type="text" />
         </div>
       </section>
 
-      <template v-if="tickers.length">
+      <template v-if="filteredTickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="ticker in tickers.slice((page - 1) * tickersCountOnPage, page * tickersCountOnPage)"
+            v-for="ticker in filteredTickers.slice(
+              (page - 1) * tickersCountOnPage,
+              page * tickersCountOnPage
+            )"
             :key="ticker.id"
             @click="select(ticker)"
             :class="{ 'border-4': sel === ticker }"
