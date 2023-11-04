@@ -37,6 +37,19 @@ const normalizeGraph = () => {
   })
 }
 
+const addUpdatePrice = (coinName) => {
+  setInterval(async () => {
+    const currentTicher = tickers.value.find((item) => item.name === coinName)
+    const currentPrice = await getPrice(currentTicher.name)
+    currentTicher.value = currentPrice
+    currentTicher.graph.push(currentPrice)
+    
+    if (sel.value?.name === coinName) {
+      graph.value.push(currentPrice);
+    }
+  }, 3000)
+}
+
 const addTicker = async () => {
   if (tickers.value.filter((item) => item.name.toLowerCase() === tickerName.value.toLowerCase()).length > 0) {
     isError = true;
@@ -73,6 +86,10 @@ const removeSel = () => {
 
 onMounted( async () => {
   coinsList = await getCoins();
+  tickers.value = JSON.parse(window.localStorage.getItem('tickers'));
+  tickers.value.forEach((item) => {
+    addUpdatePrice(item.name);
+  })
 })
 
 watch(tickerName, () => {
