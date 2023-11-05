@@ -5,17 +5,21 @@ const tickersCountOnPage = 6;
 const API_KEY = '1b48dde3374cb66b9a772f65ba4b5b1a11caa1bea6925e23de1f45f398f60019';
 const tickerPlaceholder = 'Введите тикер';
 const minHeightBar = 5;
+
 const tickerName = ref('');
 const sel = ref(null);
+
 const graph = ref(null);
+
 const tickers = ref([]);
 const filter = ref('');
-let filteredTickers = ref([]);
+
 let page = ref(1);
 let id = 0;
 let coinsList = [];
 let coins = ref([]);
 let isError = false;
+let hasNextPage = ref(false);
 
 const getPrice = async (fsymName) => {
   const response = await fetch(
@@ -100,13 +104,28 @@ const removeSel = () => {
   sel.value = null;
 };
 
+const filteredTickers = () => {
+  const start = (page.value - 1) * tickersCountOnPage;
+  const end = page.value * tickersCountOnPage;
+
+  const filteredTickers = tickers.value.filter((ticker) => ticker.name.toLowerCase().includes(filter.value.trim().toLocaleLowerCase()));
+
+  hasNextPage.value = filteredTickers.length > end;
+
+  return filteredTickers.slice(start, end);
+}
+
 onMounted(async () => {
   coinsList = await getCoins();
   tickers.value = JSON.parse(window.localStorage.getItem('tickers'));
   tickers.value.forEach((item) => {
     addUpdatePrice(item.name);
   });
-  filteredTickers.value = tickers.value;
+
+  const urlParams = Object.fromEntries(new URL(window.location).searchParams.entries());
+
+  if (urlParams.filter) filter.value = urlParams.filter;
+  if (urlParams.page) page.value = urlParams.page;
 });
 
 watch(tickerName, () => {
@@ -122,9 +141,14 @@ watch(tickerName, () => {
 });
 
 watch(filter, () => {
-  const { value } = filter;
-  filteredTickers.value = tickers.value.filter((ticker) => ticker.name.toLowerCase().indexOf(value.trim().toLowerCase()) > -1);
+  page.value = 1;
+  window.history.pushState(null, null, `${window.location.origin}?filter=${filter.value}&page=${page.value}`);
 });
+
+watch(page, () => {
+  window.history.pushState(null, null, `${window.location.origin}?filter=${filter.value}&page=${page.value}`);
+});
+
 </script>
 
 <template>
@@ -191,31 +215,29 @@ watch(filter, () => {
           <hr class="w-full border-t border-gray-600 my-4" />
           <button
             v-if="page > 1"
-            @click="page--"
+            @click="page -= 1"
             class="my-4 mx-2 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
           >
             Назад
           </button>
           <button
-            v-if="filteredTickers.length - tickersCountOnPage * page > 0"
-            @click="page++"
+            v-if="hasNextPage"
+            @click="page += 1"
             class="my-4 mx-2 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
           >
             Вперёд
           </button>
           <br />
+          Фильтр: 
           <input v-model="filter" type="text" />
         </div>
       </section>
 
-      <template v-if="filteredTickers.length">
+      <template v-if="filteredTickers().length">
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="ticker in filteredTickers.slice(
-              (page - 1) * tickersCountOnPage,
-              page * tickersCountOnPage
-            )"
+            v-for="ticker in filteredTickers()"
             :key="ticker.id"
             @click="select(ticker)"
             :class="{ 'border-4': sel === ticker }"
