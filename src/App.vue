@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 
 const tickersCountOnPage = 6;
 const API_KEY = '1b48dde3374cb66b9a772f65ba4b5b1a11caa1bea6925e23de1f45f398f60019';
@@ -7,19 +7,18 @@ const tickerPlaceholder = 'Введите тикер';
 const minHeightBar = 5;
 
 const tickerName = ref('');
-const sel = ref(null);
+const selectedTicker = ref(null);
 
 const graph = ref(null);
 
 const tickers = ref([]);
 const filter = ref('');
 
-let page = ref(1);
+const page = ref(1);
+const coins = ref([]);
+const isError = ref(false);
 let id = 0;
 let coinsList = [];
-let coins = ref([]);
-let isError = false;
-let hasNextPage = ref(false);
 
 const getPrice = async (fsymName) => {
   const response = await fetch(
@@ -38,16 +37,6 @@ const getCoins = async () => {
   return result.Data;
 };
 
-const normalizeGraph = () => {
-  const minValue = Math.min(...graph.value);
-  const maxValue = Math.max(...graph.value);
-
-  return graph.value.map((value) => {
-    const result = 5 + ((value - minValue) / (maxValue - minValue)) * 95;
-    return isNaN(result) ? minHeightBar : result;
-  });
-};
-
 const addUpdatePrice = (coinName) => {
   setInterval(async () => {
     const currentTicher = tickers.value.find((item) => item.name === coinName);
@@ -55,18 +44,15 @@ const addUpdatePrice = (coinName) => {
     currentTicher.value = currentPrice;
     currentTicher.graph.push(currentPrice);
 
-    if (sel.value?.name === coinName) {
+    if (selectedTicker.value?.name === coinName) {
       graph.value.push(currentPrice);
     }
   }, 3000);
 };
 
 const addTicker = async () => {
-  if (
-    tickers.value.filter((item) => item.name.toLowerCase() === tickerName.value.toLowerCase())
-      .length > 0
-  ) {
-    isError = true;
+  if (tickers.value.filter((item) => item.name.toLowerCase() === tickerName.value.toLowerCase()).length > 0) {
+    isError.value = true;
     return;
   }
 
@@ -78,21 +64,22 @@ const addTicker = async () => {
     id: id++,
     graph: []
   };
-  tickers.value.push(newTicher);
+  tickers.value = [...tickers.value, newTicher];
   tickerName.value = '';
 
-  window.localStorage.setItem('tickers', JSON.stringify(tickers.value));
   addUpdatePrice(newTicher.name);
 };
 
 const removeTicker = (ticker) => {
   tickers.value = tickers.value.filter((item) => item !== ticker);
-  window.localStorage.setItem('tickers', JSON.stringify(tickers.value));
+
+  if (ticker === selectedTicker.value) {
+    selectedTicker.value = null;
+  }
 };
 
 const select = (ticker) => {
-  graph.value = [];
-  sel.value = ticker;
+  selectedTicker.value = ticker;
 };
 
 const inputCoint = (coinName) => {
@@ -100,20 +87,47 @@ const inputCoint = (coinName) => {
   addTicker();
 };
 
-const removeSel = () => {
-  sel.value = null;
+const removeSelectedTicker = () => {
+  selectedTicker.value = null;
 };
 
-const filteredTickers = () => {
-  const start = (page.value - 1) * tickersCountOnPage;
-  const end = page.value * tickersCountOnPage;
+// a computed refs
+const normalizedGraph = computed(() => {
+  const minValue = Math.min(...graph.value);
+  const maxValue = Math.max(...graph.value);
 
-  const filteredTickers = tickers.value.filter((ticker) => ticker.name.toLowerCase().includes(filter.value.trim().toLocaleLowerCase()));
+  if (maxValue === minValue) {
+    return graph.value.map(() => 50);
+  }
 
-  hasNextPage.value = filteredTickers.length > end;
+  return graph.value.map((value) => {
+    const result = 5 + ((value - minValue) / (maxValue - minValue)) * 95;
+    return isNaN(result) ? minHeightBar : result;
+  });
+});
 
-  return filteredTickers.slice(start, end);
-}
+const startIndex = computed(() => (page.value - 1) * tickersCountOnPage)
+
+const endIndex = computed(() => page.value * tickersCountOnPage);
+
+const filteredTickers = computed(() => {
+  return tickers.value.filter((ticker) => ticker.name.toLowerCase().includes(filter.value.trim().toLocaleLowerCase()));
+});
+
+const paginatedTickers = computed(() => {
+  return filteredTickers.value.slice(startIndex.value, endIndex.value);
+});
+
+const hasNextPage = computed(() => {
+  return filteredTickers.value.length > endIndex.value;
+}); 
+
+const pageOptionsValue = computed(() => {
+  return {
+    filter: filter.value,
+    page: page.value,
+  }
+});
 
 onMounted(async () => {
   coinsList = await getCoins();
@@ -128,26 +142,41 @@ onMounted(async () => {
   if (urlParams.page) page.value = urlParams.page;
 });
 
+
+// watchers
 watch(tickerName, () => {
   if (tickerName.value.length > 0) {
     coins.value = Object.entries(coinsList)
       .filter((item) => item[1].FullName.toLowerCase().search(tickerName.value.toLowerCase()) > -1)
       .slice(0, 4);
-    isError = false;
+    isError.value = false;
   } else {
     coins.value = [];
-    isError = false;
+    isError.value = false;
   }
 });
 
+watch(tickers, () => {
+  window.localStorage.setItem('tickers', JSON.stringify(tickers.value));
+})
+
+watch(selectedTicker, () => {
+  graph.value = [];
+})
+
 watch(filter, () => {
   page.value = 1;
-  window.history.pushState(null, null, `${window.location.origin}?filter=${filter.value}&page=${page.value}`);
 });
 
-watch(page, () => {
-  window.history.pushState(null, null, `${window.location.origin}?filter=${filter.value}&page=${page.value}`);
-});
+watch(pageOptionsValue, (value) => {
+  window.history.pushState(null, null, `${window.location.origin}?filter=${value.filter}&page=${value.page}`);
+})
+
+watch(paginatedTickers, () => {
+  if (paginatedTickers.value.length === 0 && page.value > 1) {
+    page.value -= 1;
+  }
+})
 
 </script>
 
@@ -215,14 +244,14 @@ watch(page, () => {
           <hr class="w-full border-t border-gray-600 my-4" />
           <button
             v-if="page > 1"
-            @click="page -= 1"
+            @click="page--"
             class="my-4 mx-2 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
           >
             Назад
           </button>
           <button
             v-if="hasNextPage"
-            @click="page += 1"
+            @click="page++"
             class="my-4 mx-2 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
           >
             Вперёд
@@ -233,14 +262,14 @@ watch(page, () => {
         </div>
       </section>
 
-      <template v-if="filteredTickers().length">
+      <template v-if="paginatedTickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="ticker in filteredTickers()"
+            v-for="ticker in paginatedTickers"
             :key="ticker.id"
             @click="select(ticker)"
-            :class="{ 'border-4': sel === ticker }"
+            :class="{ 'border-4': selectedTicker === ticker }"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
             <div class="px-4 py-5 sm:p-6 text-center">
@@ -270,19 +299,19 @@ watch(page, () => {
         </dl>
       </template>
 
-      <template v-if="sel">
+      <template v-if="selectedTicker">
         <hr class="w-full border-t border-gray-600 my-4" />
         <section class="relative">
-          <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">{{ sel.name }} - USD</h3>
+          <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">{{ selectedTicker.name }} - USD</h3>
           <div class="flex items-end border-gray-600 border-b border-l h-64">
             <div
-              v-for="bar in normalizeGraph()"
+              v-for="bar in normalizedGraph"
               :key="bar.id"
               :style="{ height: bar + '%' }"
               class="bg-purple-800 border w-10"
             ></div>
           </div>
-          <button @click="removeSel" type="button" class="absolute top-0 right-0">
+          <button @click="removeSelectedTicker" type="button" class="absolute top-0 right-0">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               xmlns:xlink="http://www.w3.org/1999/xlink"
