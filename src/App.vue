@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue';
+import { subscribeTicker, unsubscribeTicker, getCoins } from './api';
 
 const tickersCountOnPage = 6;
-const API_KEY = '1b48dde3374cb66b9a772f65ba4b5b1a11caa1bea6925e23de1f45f398f60019';
 const tickerPlaceholder = 'Введите тикер';
 const minHeightBar = 5;
 
@@ -20,58 +20,43 @@ const isError = ref(false);
 let id = 0;
 let coinsList = [];
 
-const getPrice = async (fsymName) => {
-  const response = await fetch(
-    `https://min-api.cryptocompare.com/data/price?fsym=${fsymName}&tsyms=USD&api_key=${API_KEY}`
-  );
-  const result = await response.json();
-  const value = result.USD;
-  return value > 1 ? value.toFixed(2) : value.toPrecision(2);
-};
+const formatPrice = (price) => {
+  if (!price) {
+    return '-';
+  }
 
-const getCoins = async () => {
-  const response = await fetch(
-    `https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=${API_KEY}`
-  );
-  const result = await response.json();
-  return result.Data;
-};
+  return price > 1 ? price.toFixed(2) : price.toPrecision(2);
+}
 
-const addUpdatePrice = (coinName) => {
-  setInterval(async () => {
-    const currentTicher = tickers.value.find((item) => item.name === coinName);
-    const currentPrice = await getPrice(currentTicher.name);
-    currentTicher.value = currentPrice;
-    currentTicher.graph.push(currentPrice);
-
-    if (selectedTicker.value?.name === coinName) {
-      graph.value.push(currentPrice);
-    }
-  }, 3000);
+const updatePrice = (tickerName, newPrice) => {
+  tickers.value.filter((t) => t.name === tickerName).forEach((ticker) => ticker.price = newPrice);
 };
 
 const addTicker = async () => {
-  if (tickers.value.filter((item) => item.name.toLowerCase() === tickerName.value.toLowerCase()).length > 0) {
+  if (
+    tickers.value.filter((item) => item.name.toLowerCase() === tickerName.value.toLowerCase())
+      .length > 0
+  ) {
     isError.value = true;
     return;
   }
-
-  const currentValue = await getPrice(tickerName.value.toUpperCase());
-
-  const newTicher = {
+  
+  const newTicker = {
     name: tickerName.value.toUpperCase(),
-    value: currentValue,
+    price: '-',
     id: id++,
-    graph: []
   };
-  tickers.value = [...tickers.value, newTicher];
+  tickers.value = [...tickers.value, newTicker];
   tickerName.value = '';
+  filter.value = '';
 
-  addUpdatePrice(newTicher.name);
+  subscribeTicker(newTicker.name, (newPrice) => updatePrice(newTicker.name, formatPrice(newPrice)));
 };
 
 const removeTicker = (ticker) => {
   tickers.value = tickers.value.filter((item) => item !== ticker);
+
+  unsubscribeTicker(ticker.name);
 
   if (ticker === selectedTicker.value) {
     selectedTicker.value = null;
@@ -106,12 +91,14 @@ const normalizedGraph = computed(() => {
   });
 });
 
-const startIndex = computed(() => (page.value - 1) * tickersCountOnPage)
+const startIndex = computed(() => (page.value - 1) * tickersCountOnPage);
 
 const endIndex = computed(() => page.value * tickersCountOnPage);
 
 const filteredTickers = computed(() => {
-  return tickers.value.filter((ticker) => ticker.name.toLowerCase().includes(filter.value.trim().toLocaleLowerCase()));
+  return tickers.value.filter((ticker) =>
+    ticker.name.toLowerCase().includes(filter.value.trim().toLocaleLowerCase())
+  );
 });
 
 const paginatedTickers = computed(() => {
@@ -120,28 +107,30 @@ const paginatedTickers = computed(() => {
 
 const hasNextPage = computed(() => {
   return filteredTickers.value.length > endIndex.value;
-}); 
+});
 
 const pageOptionsValue = computed(() => {
   return {
     filter: filter.value,
-    page: page.value,
-  }
+    page: page.value
+  };
 });
 
 onMounted(async () => {
   coinsList = await getCoins();
-  tickers.value = JSON.parse(window.localStorage.getItem('tickers'));
-  tickers.value.forEach((item) => {
-    addUpdatePrice(item.name);
-  });
+  tickers.value = JSON.parse(window.localStorage.getItem('tickers')) || [];
+
+  if (tickers.value.length > 0) {
+    tickers.value.forEach((ticker) => {
+      subscribeTicker(ticker.name, (newPrice) => updatePrice(ticker.name, formatPrice(newPrice)));
+    });
+  }
 
   const urlParams = Object.fromEntries(new URL(window.location).searchParams.entries());
 
   if (urlParams.filter) filter.value = urlParams.filter;
   if (urlParams.page) page.value = urlParams.page;
 });
-
 
 // watchers
 watch(tickerName, () => {
@@ -158,26 +147,29 @@ watch(tickerName, () => {
 
 watch(tickers, () => {
   window.localStorage.setItem('tickers', JSON.stringify(tickers.value));
-})
+});
 
 watch(selectedTicker, () => {
   graph.value = [];
-})
+});
 
 watch(filter, () => {
   page.value = 1;
 });
 
 watch(pageOptionsValue, (value) => {
-  window.history.pushState(null, null, `${window.location.origin}?filter=${value.filter}&page=${value.page}`);
-})
+  window.history.pushState(
+    null,
+    null,
+    `${window.location.origin}?filter=${value.filter}&page=${value.page}`
+  );
+});
 
 watch(paginatedTickers, () => {
   if (paginatedTickers.value.length === 0 && page.value > 1) {
     page.value -= 1;
   }
-})
-
+});
 </script>
 
 <template>
@@ -257,7 +249,7 @@ watch(paginatedTickers, () => {
             Вперёд
           </button>
           <br />
-          Фильтр: 
+          Фильтр:
           <input v-model="filter" type="text" />
         </div>
       </section>
@@ -274,7 +266,7 @@ watch(paginatedTickers, () => {
           >
             <div class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">{{ ticker.name }} - USD</dt>
-              <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ ticker.value }}</dd>
+              <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ ticker.price }}</dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
             <button
@@ -302,7 +294,9 @@ watch(paginatedTickers, () => {
       <template v-if="selectedTicker">
         <hr class="w-full border-t border-gray-600 my-4" />
         <section class="relative">
-          <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">{{ selectedTicker.name }} - USD</h3>
+          <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
+            {{ selectedTicker.name }} - USD
+          </h3>
           <div class="flex items-end border-gray-600 border-b border-l h-64">
             <div
               v-for="bar in normalizedGraph"
