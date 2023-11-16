@@ -30,6 +30,10 @@ const formatPrice = (price) => {
 
 const updatePrice = (tickerName, newPrice) => {
   tickers.value.filter((t) => t.name === tickerName).forEach((ticker) => ticker.price = newPrice);
+
+  if (selectedTicker.value !== null && tickerName === selectedTicker.value.name) {
+    graph.value.push(newPrice);
+  }
 };
 
 const addTicker = async () => {
