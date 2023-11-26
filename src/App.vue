@@ -273,8 +273,8 @@ watch(paginatedTickers, () => {
             v-for="ticker in paginatedTickers"
             :key="ticker.id"
             @click="ticker.isEmpty ? '' : select(ticker)"
-            :class="{ 'border-4': selectedTicker === ticker, 'bg-red-100': ticker.isEmpty === true }"
-            class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
+            :class="[selectedTicker === ticker ? 'border-4' : '', ticker.isEmpty == true ? 'bg-red-100' : 'bg-white']"
+            class="overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
             <div class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">{{ ticker.name }} - USD</dt>
@@ -283,7 +283,7 @@ watch(paginatedTickers, () => {
             <div class="w-full border-t border-gray-200"></div>
             <button
               @click.stop="removeTicker(ticker)"
-              class="flex items-center justify-center font-medium w-full bg-gray-100 px-4 py-4 sm:px-6 text-md text-gray-500 hover:text-gray-600 hover:bg-gray-200 hover:opacity-20 transition-all focus:outline-none"
+              class="flex items-center justify-center font-medium w-full bg-gray-100 px-4 py-4 sm:px-6 text-md text-gray-500 hover:text-gray-600 hover:bg-gray-200 transition-all focus:outline-none"
             >
               <svg
                 class="h-5 w-5"
