@@ -48,14 +48,22 @@ const unsubscribeTicker = (tickerName) => {
 	unsubscribeTickerFromWS(tickerName);
 }
 
-socket.addEventListener('message', (message) => {
-	const {TYPE: type, FROMSYMBOL: tickerName, PRICE: newPrice} = JSON.parse(message.data);
+socket.addEventListener('message', (event) => {
+	const {TYPE: type, FROMSYMBOL: tickerName, PRICE: newPrice, PARAMETER: parameter, MESSAGE: message} = JSON.parse(event.data);
 
-	if (type !== AGGREGATE_INDEX) {
+	if (type === AGGREGATE_INDEX) {
+		const handlers = tickersHandlers.get(tickerName) || [];
+		handlers.forEach((handler) => handler(newPrice));
 		return;
 	}
 
-	const handlers = tickersHandlers.get(tickerName) || [];
-	handlers.forEach((handler) => handler(newPrice));
+	if (type === "500" && message === 'INVALID_SUB') {
+		const tickerName = parameter.split('~').at(-2);
+		// unsubscribeTickerFromWS(tickerName);
+
+		const handlers = tickersHandlers.get(tickerName) || [];
+		handlers.forEach((handler) => handler(newPrice, true));
+	}
+
 })
 export {subscribeTicker, getCoins, unsubscribeTicker};

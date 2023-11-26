@@ -28,11 +28,18 @@ const formatPrice = (price) => {
   return price > 1 ? price.toFixed(2) : price.toPrecision(2);
 }
 
-const updatePrice = (tickerName, newPrice) => {
-  tickers.value.filter((t) => t.name === tickerName).forEach((ticker) => ticker.price = newPrice);
+const updatePrice = (name, price, isEmpty = false) => {
+  if (isEmpty === true) {
+    tickers.value.filter((ticker) => ticker.name === name).forEach((ticker) => {
+      ticker.isEmpty = true
+    })
+    return;
+  }
 
-  if (selectedTicker.value !== null && tickerName === selectedTicker.value.name) {
-    graph.value.push(newPrice);
+  tickers.value.filter((t) => t.name === name).forEach((ticker) => ticker.price = price);
+
+  if (selectedTicker.value !== null && name === selectedTicker.value.name) {
+    graph.value.push(price);
   }
 };
 
@@ -49,12 +56,13 @@ const addTicker = async () => {
     name: tickerName.value.toUpperCase(),
     price: '-',
     id: id++,
+    isEmpty: false,
   };
   tickers.value = [...tickers.value, newTicker];
   tickerName.value = '';
   filter.value = '';
 
-  subscribeTicker(newTicker.name, (newPrice) => updatePrice(newTicker.name, formatPrice(newPrice)));
+  subscribeTicker(newTicker.name, (newPrice, isEmpty) => updatePrice(newTicker.name, formatPrice(newPrice), isEmpty));
 };
 
 const removeTicker = (ticker) => {
@@ -126,7 +134,7 @@ onMounted(async () => {
 
   if (tickers.value.length > 0) {
     tickers.value.forEach((ticker) => {
-      subscribeTicker(ticker.name, (newPrice) => updatePrice(ticker.name, formatPrice(newPrice)));
+      subscribeTicker(ticker.name, (newPrice, isEmpty) => updatePrice(ticker.name, formatPrice(newPrice), isEmpty));
     });
   }
 
@@ -264,8 +272,8 @@ watch(paginatedTickers, () => {
           <div
             v-for="ticker in paginatedTickers"
             :key="ticker.id"
-            @click="select(ticker)"
-            :class="{ 'border-4': selectedTicker === ticker }"
+            @click="ticker.isEmpty ? '' : select(ticker)"
+            :class="{ 'border-4': selectedTicker === ticker, 'bg-red-100': ticker.isEmpty === true }"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
             <div class="px-4 py-5 sm:p-6 text-center">
