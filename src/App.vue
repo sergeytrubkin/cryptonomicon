@@ -29,18 +29,20 @@ const formatPrice = (price) => {
 }
 
 const updatePrice = (name, price, isEmpty = false) => {
+  const currentTicker = tickers.value.filter((ticker) => ticker.name === name)[0];
+
   if (isEmpty === true) {
-    tickers.value.filter((ticker) => ticker.name === name).forEach((ticker) => {
-      ticker.isEmpty = true
-    })
+    currentTicker.isEmpty = true;
     return;
   }
 
-  tickers.value.filter((t) => t.name === name).forEach((ticker) => ticker.price = price);
+  currentTicker.price = price;
 
   if (selectedTicker.value !== null && name === selectedTicker.value.name) {
     graph.value.push(price);
   }
+
+  currentTicker.isEmpty = false;
 };
 
 const addTicker = async () => {
@@ -273,8 +275,8 @@ watch(paginatedTickers, () => {
             v-for="ticker in paginatedTickers"
             :key="ticker.id"
             @click="ticker.isEmpty ? '' : select(ticker)"
-            :class="{ 'border-4': selectedTicker === ticker, 'bg-red-100': ticker.isEmpty === true }"
-            class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
+            :class="[selectedTicker === ticker ? 'border-4': '', ticker.isEmpty === true ? 'bg-red-100' : 'bg-white']"
+            class="overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
             <div class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">{{ ticker.name }} - USD</dt>
