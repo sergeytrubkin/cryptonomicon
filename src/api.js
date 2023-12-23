@@ -1,8 +1,17 @@
 const API_KEY = '907d1321d5f531cce4f7ef91dfc0a9111f4804111b6820ecfe42f044cf454051';
-const AGGREGATE_INDEX = '5';
-
+const AGGREGATE_INDEXES = {
+	SUCCESS: '5',
+	ERROR: '500',
+};
+const TICKER_NAMES = {
+	MAIN: 'USD',
+	BTC: 'BTC',
+}
 const tickersHandlers = new Map();
+const tickersConnectedToBtc = new Map();
 const socket = new WebSocket(`wss://streamer.cryptocompare.com/v2?api_key=${API_KEY}`)
+let btcToUsdPrice;
+let isBtcToUsdConnected = false;
 
 const getCoins = async () => {
 	const response = await fetch(
@@ -20,20 +29,20 @@ const sendMessageToWS = (message) => {
 	}
 	socket.addEventListener('open', () => {
 		socket.send(stringifiedMessage);
-	}, {once: true});
+	}, { once: true });
 }
 
-const subscribeTickerToWS = (ticker) => {
+const subscribeTickerToWS = (tickerFrom, tickerTo = TICKER_NAMES.MAIN) => {
 	sendMessageToWS({
 		"action": "SubAdd",
-		"subs": [`5~CCCAGG~${ticker}~USD`]
+		"subs": [`5~CCCAGG~${tickerFrom}~${tickerTo}`]
 	})
 }
 
-const unsubscribeTickerFromWS = (ticker) => {
+const unsubscribeTickerFromWS = (tickerFrom, tickerTo = TICKER_NAMES.MAIN) => {
 	sendMessageToWS({
 		"action": "SubRemove",
-		"subs": [`5~CCCAGG~${ticker}~USD`]
+		"subs": [`5~CCCAGG~${tickerFrom}~${tickerTo}`]
 	});
 }
 
@@ -45,25 +54,65 @@ const subscribeTicker = (tickerName, cb) => {
 
 const unsubscribeTicker = (tickerName) => {
 	tickersHandlers.delete(tickerName);
-	unsubscribeTickerFromWS(tickerName);
+
+	if (tickersConnectedToBtc.has(tickerName)) {
+		tickersConnectedToBtc.delete(tickerName);
+		if (tickersConnectedToBtc.size === 0 && !tickersHandlers.has(TICKER_NAMES.BTC)) {
+			unsubscribeTickerFromWS(TICKER_NAMES.BTC, TICKER_NAMES.MAIN);
+			unsubscribeTickerFromWS(tickerName, TICKER_NAMES.BTC);
+		}
+	} else {
+		unsubscribeTickerFromWS(tickerName);
+	}
 }
 
 socket.addEventListener('message', (event) => {
-	const {TYPE: type, FROMSYMBOL: tickerName, PRICE: newPrice, PARAMETER: parameter, MESSAGE: message} = JSON.parse(event.data);
+	const {
+		TYPE: type,
+		FROMSYMBOL: tickerNameFrom,
+		TOSYMBOL: tickerNameTo,
+		PRICE: newPrice,
+		PARAMETER: parameter,
+		MESSAGE: message } = JSON.parse(event.data);
+	const handlers = tickersHandlers.get(tickerNameFrom) || [];
 
-	if (type === AGGREGATE_INDEX) {
-		const handlers = tickersHandlers.get(tickerName) || [];
-		handlers.forEach((handler) => handler(newPrice));
-		return;
+	if (type === AGGREGATE_INDEXES.SUCCESS) {
+		switch (tickerNameTo) {
+			case TICKER_NAMES.MAIN: {
+				handlers.forEach((handler) => handler(newPrice, false));
+				if (tickerNameFrom === TICKER_NAMES.BTC) btcToUsdPrice = newPrice;
+				break;
+			}
+			case TICKER_NAMES.BTC: {
+				const currentPrice = newPrice * btcToUsdPrice;
+				handlers.forEach((handler) => handler(currentPrice, false));
+				break;
+			}
+		}
 	}
 
-	if (type === "500" && message === 'INVALID_SUB') {
-		const tickerName = parameter.split('~').at(-2);
-		// unsubscribeTickerFromWS(tickerName);
+	if (type === AGGREGATE_INDEXES.ERROR && message === 'INVALID_SUB') {
+		const tickerNameFrom = parameter.split('~').at(-2);
+		const tickerNameTo = parameter.split('~').at(-1);
 
-		const handlers = tickersHandlers.get(tickerName) || [];
-		handlers.forEach((handler) => handler(newPrice, true));
+		if (tickerNameTo === TICKER_NAMES.MAIN) {
+			if (!isBtcToUsdConnected && !tickersHandlers.has(TICKER_NAMES.BTC)) {
+				subscribeTickerToWS(TICKER_NAMES.BTC, TICKER_NAMES.MAIN);
+			}
+			unsubscribeTickerFromWS(tickerNameFrom);
+			subscribeTickerToWS(tickerNameFrom, TICKER_NAMES.BTC);
+			tickersConnectedToBtc.set(tickerNameFrom);
+		} else {
+			unsubscribeTickerFromWS(tickerNameFrom, TICKER_NAMES.BTC);
+			const handlers = tickersHandlers.get(tickerNameFrom) || [];
+			handlers.forEach((handler) => handler(newPrice, true));
+
+			tickersConnectedToBtc.delete(tickerNameFrom);
+			if (tickersConnectedToBtc.size === 0 && !tickersHandlers.has(TICKER_NAMES.BTC)) {
+				unsubscribeTickerFromWS(TICKER_NAMES.BTC, TICKER_NAMES.MAIN);
+			}
+		}
 	}
-
 })
-export {subscribeTicker, getCoins, unsubscribeTicker};
+
+export { subscribeTicker, getCoins, unsubscribeTicker };
