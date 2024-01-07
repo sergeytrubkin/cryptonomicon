@@ -50,7 +50,7 @@ const unsubscribeTickerFromWS = (tickerFrom, tickerTo = TICKER_NAMES.MAIN) => {
 const subscribeTicker = (tickerName, cb) => {
 	const subscribers = tickersHandlers.get(tickerName) || [];
 	tickersHandlers.set(tickerName, [...subscribers, cb]);
-	subscribeTickerToWS(tickerName);
+	subscribeTickerToWS(tickerName, 'USD');
 }
 
 const unsubscribeTicker = (tickerName) => {
