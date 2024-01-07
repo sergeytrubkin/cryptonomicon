@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue';
+import { ref, onMounted, watch, computed, nextTick } from 'vue';
 import { subscribeTicker, unsubscribeTicker, getCoins } from './api';
 
 const tickersCountOnPage = 6;
@@ -10,6 +10,10 @@ const tickerName = ref('');
 const selectedTicker = ref(null);
 
 const graph = ref(null);
+const maxCountBarsOfGraph = ref(5);
+const barWrapper = ref(null);
+const barItem = ref([]);
+let barItemWidth = 0;
 
 const tickers = ref([]);
 const filter = ref('');
@@ -20,15 +24,25 @@ const isError = ref(false);
 let id = 0;
 let coinsList = [];
 
+const calculateMaxCountBarsOfGraph = () => {
+  maxCountBarsOfGraph.value = Math.ceil(barWrapper.value.offsetWidth / barItemWidth);
+};
+
+const getMaxNumberOfGraphValues = () => {
+  if (graph.value.length > maxCountBarsOfGraph.value) {
+    graph.value = graph.value.slice(graph.value.length - maxCountBarsOfGraph.value, graph.value.length);
+  }
+}
+
 const formatPrice = (price) => {
   if (!price) {
     return '-';
   }
 
   return price > 1 ? price.toFixed(2) : price.toPrecision(2);
-}
+};
 
-const updatePrice = (name, price, isEmpty = false) => {
+const updatePrice = async (name, price, isEmpty = false) => {
   const currentTicker = tickers.value.filter((ticker) => ticker.name === name)[0];
 
   if (isEmpty === true) {
@@ -40,6 +54,14 @@ const updatePrice = (name, price, isEmpty = false) => {
 
   if (selectedTicker.value !== null && name === selectedTicker.value.name) {
     graph.value.push(price);
+    getMaxNumberOfGraphValues();
+
+    await nextTick().then(() => {
+      if (barWrapper.value && barItem.value.length > 0 && barItemWidth === 0) {
+        barItemWidth = barItem.value.at(0).offsetWidth;
+        calculateMaxCountBarsOfGraph();
+      }
+    });
   }
 
   currentTicker.isEmpty = false;
@@ -53,18 +75,20 @@ const addTicker = async () => {
     isError.value = true;
     return;
   }
-  
+
   const newTicker = {
     name: tickerName.value.toUpperCase(),
     price: '-',
     id: id++,
-    isEmpty: false,
+    isEmpty: false
   };
   tickers.value = [...tickers.value, newTicker];
   tickerName.value = '';
   filter.value = '';
 
-  subscribeTicker(newTicker.name, (newPrice, isEmpty) => updatePrice(newTicker.name, formatPrice(newPrice), isEmpty));
+  subscribeTicker(newTicker.name, (newPrice, isEmpty) =>
+    updatePrice(newTicker.name, formatPrice(newPrice), isEmpty)
+  );
 };
 
 const removeTicker = (ticker) => {
@@ -77,8 +101,12 @@ const removeTicker = (ticker) => {
   }
 };
 
-const select = (ticker) => {
+const select = async (ticker) => {
   selectedTicker.value = ticker;
+
+  await nextTick().then(() => {
+    if (barItemWidth !== 0) calculateMaxCountBarsOfGraph();
+  });
 };
 
 const inputCoint = (coinName) => {
@@ -88,6 +116,7 @@ const inputCoint = (coinName) => {
 
 const removeSelectedTicker = () => {
   selectedTicker.value = null;
+  barItemWidth = 0;
 };
 
 // a computed refs
@@ -134,9 +163,18 @@ onMounted(async () => {
   coinsList = await getCoins();
   tickers.value = JSON.parse(window.localStorage.getItem('tickers')) || [];
 
+  window.addEventListener('resize', () => {
+    if (barWrapper.value && barItemWidth !== 0 && selectedTicker.value !== null) {
+      calculateMaxCountBarsOfGraph();
+      getMaxNumberOfGraphValues();
+    };
+  });
+
   if (tickers.value.length > 0) {
     tickers.value.forEach((ticker) => {
-      subscribeTicker(ticker.name, (newPrice, isEmpty) => updatePrice(ticker.name, formatPrice(newPrice), isEmpty));
+      subscribeTicker(ticker.name, (newPrice, isEmpty) =>
+        updatePrice(ticker.name, formatPrice(newPrice), isEmpty)
+      );
     });
   }
 
@@ -275,7 +313,10 @@ watch(paginatedTickers, () => {
             v-for="ticker in paginatedTickers"
             :key="ticker.id"
             @click="ticker.isEmpty ? '' : select(ticker)"
-            :class="[selectedTicker === ticker ? 'border-4': '', ticker.isEmpty === true ? 'bg-red-100' : 'bg-white']"
+            :class="[
+              selectedTicker === ticker ? 'border-4' : '',
+              ticker.isEmpty === true ? 'bg-red-100' : 'bg-white'
+            ]"
             class="overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
             <div class="px-4 py-5 sm:p-6 text-center">
@@ -311,11 +352,12 @@ watch(paginatedTickers, () => {
           <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
             {{ selectedTicker.name }} - USD
           </h3>
-          <div class="flex items-end border-gray-600 border-b border-l h-64">
+          <div class="flex items-end border-gray-600 border-b border-l h-64" ref="barWrapper">
             <div
               v-for="bar in normalizedGraph"
               :key="bar.id"
               :style="{ height: bar + '%' }"
+              ref="barItem"
               class="bg-purple-800 border w-10"
             ></div>
           </div>

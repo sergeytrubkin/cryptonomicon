@@ -119,7 +119,6 @@ socket.addEventListener('message', (event) => {
 })
 
 myWorker.port.onmessage = function (event) {
-	console.log(JSON.parse(event.data));
 	const { tickerNameFrom, newPrice, isEmptyPrice } = JSON.parse(event.data);
 	const handlers = tickersHandlers.get(tickerNameFrom) || [];
 	handlers.forEach((handler) => handler(newPrice, isEmptyPrice));
