@@ -10,6 +10,7 @@ const TICKER_NAMES = {
 const tickersHandlers = new Map();
 const tickersConnectedToBtc = new Map();
 const socket = new WebSocket(`wss://streamer.cryptocompare.com/v2?api_key=${API_KEY}`)
+const myWorker = new SharedWorker("./src/worker.js");
 let btcToUsdPrice;
 let isBtcToUsdConnected = false;
 
@@ -77,15 +78,17 @@ socket.addEventListener('message', (event) => {
 	const handlers = tickersHandlers.get(tickerNameFrom) || [];
 
 	if (type === AGGREGATE_INDEXES.SUCCESS) {
+		const isEmptyPrice = false;
 		switch (tickerNameTo) {
 			case TICKER_NAMES.MAIN: {
-				handlers.forEach((handler) => handler(newPrice, false));
+				myWorker.port.postMessage({tickerNameFrom, newPrice, isEmptyPrice});
+				handlers.forEach((handler) => handler(newPrice, isEmptyPrice));
 				if (tickerNameFrom === TICKER_NAMES.BTC) btcToUsdPrice = newPrice;
 				break;
 			}
 			case TICKER_NAMES.BTC: {
 				const currentPrice = newPrice * btcToUsdPrice;
-				handlers.forEach((handler) => handler(currentPrice, false));
+				handlers.forEach((handler) => handler(currentPrice, isEmptyPrice));
 				break;
 			}
 		}
@@ -114,5 +117,12 @@ socket.addEventListener('message', (event) => {
 		}
 	}
 })
+
+myWorker.port.onmessage = function (event) {
+	console.log(JSON.parse(event.data));
+	const { tickerNameFrom, newPrice, isEmptyPrice } = JSON.parse(event.data);
+	const handlers = tickersHandlers.get(tickerNameFrom) || [];
+	handlers.forEach((handler) => handler(newPrice, isEmptyPrice));
+};
 
 export { subscribeTicker, getCoins, unsubscribeTicker };
