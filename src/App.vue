@@ -1,12 +1,11 @@
 <script setup>
 import { ref, onMounted, watch, computed, nextTick } from 'vue';
-import { subscribeTicker, unsubscribeTicker, getCoins } from './api';
+import { subscribeTicker, unsubscribeTicker } from './api';
+import AddTickerVue from './components/AddTicker.vue';
 
 const tickersCountOnPage = 6;
-const tickerPlaceholder = 'Введите тикер';
 const minHeightBar = 5;
 
-const tickerName = ref('');
 const selectedTicker = ref(null);
 
 const graph = ref(null);
@@ -19,10 +18,8 @@ const tickers = ref([]);
 const filter = ref('');
 
 const page = ref(1);
-const coins = ref([]);
 const isError = ref(false);
 let id = 0;
-let coinsList = [];
 
 const calculateMaxCountBarsOfGraph = () => {
   maxCountBarsOfGraph.value = Math.ceil(barWrapper.value.offsetWidth / barItemWidth);
@@ -30,9 +27,12 @@ const calculateMaxCountBarsOfGraph = () => {
 
 const getMaxNumberOfGraphValues = () => {
   if (graph.value.length > maxCountBarsOfGraph.value) {
-    graph.value = graph.value.slice(graph.value.length - maxCountBarsOfGraph.value, graph.value.length);
+    graph.value = graph.value.slice(
+      graph.value.length - maxCountBarsOfGraph.value,
+      graph.value.length
+    );
   }
-}
+};
 
 const formatPrice = (price) => {
   if (!price) {
@@ -67,23 +67,20 @@ const updatePrice = async (name, price, isEmpty = false) => {
   currentTicker.isEmpty = false;
 };
 
-const addTicker = async () => {
-  if (
-    tickers.value.filter((item) => item.name.toLowerCase() === tickerName.value.toLowerCase())
-      .length > 0
-  ) {
+const addTicker = async (ticker) => {
+  if (tickers.value.filter((item) => item.name === ticker).length > 0) {
     isError.value = true;
     return;
   }
+  isError.value = false;
 
   const newTicker = {
-    name: tickerName.value.toUpperCase(),
+    name: ticker,
     price: '-',
     id: id++,
     isEmpty: false
   };
   tickers.value = [...tickers.value, newTicker];
-  tickerName.value = '';
   filter.value = '';
 
   subscribeTicker(newTicker.name, (newPrice, isEmpty) =>
@@ -107,11 +104,6 @@ const select = async (ticker) => {
   await nextTick().then(() => {
     if (barItemWidth !== 0) calculateMaxCountBarsOfGraph();
   });
-};
-
-const inputCoint = (coinName) => {
-  tickerName.value = coinName;
-  addTicker();
 };
 
 const removeSelectedTicker = () => {
@@ -160,14 +152,13 @@ const pageOptionsValue = computed(() => {
 });
 
 onMounted(async () => {
-  coinsList = await getCoins();
   tickers.value = JSON.parse(window.localStorage.getItem('tickers')) || [];
 
   window.addEventListener('resize', () => {
     if (barWrapper.value && barItemWidth !== 0 && selectedTicker.value !== null) {
       calculateMaxCountBarsOfGraph();
       getMaxNumberOfGraphValues();
-    };
+    }
   });
 
   if (tickers.value.length > 0) {
@@ -185,18 +176,6 @@ onMounted(async () => {
 });
 
 // watchers
-watch(tickerName, () => {
-  if (tickerName.value.length > 0) {
-    coins.value = Object.entries(coinsList)
-      .filter((item) => item[1].FullName.toLowerCase().search(tickerName.value.toLowerCase()) > -1)
-      .slice(0, 4);
-    isError.value = false;
-  } else {
-    coins.value = [];
-    isError.value = false;
-  }
-});
-
 watch(tickers, () => {
   window.localStorage.setItem('tickers', JSON.stringify(tickers.value));
 });
@@ -233,57 +212,8 @@ watch(paginatedTickers, () => {
     </svg>
   </div> -->
     <div class="container">
+      <add-ticker-vue @addTicker="addTicker" :error="isError" />
       <section>
-        <div class="flex">
-          <div class="max-w-xs">
-            <label for="wallet" class="block text-sm font-medium text-gray-700">Тикер</label>
-            <div class="mt-1 relative rounded-md shadow-md">
-              <input
-                v-model="tickerName"
-                @keydown.enter="addTicker"
-                :placeholder="tickerPlaceholder"
-                type="text"
-                name="wallet"
-                id="wallet"
-                class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
-              />
-            </div>
-            <div
-              v-if="coins.length"
-              class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
-            >
-              <span
-                v-for="(coin, index) in coins"
-                :key="index"
-                @click="inputCoint(coin[1].Symbol)"
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                {{ coin[1].Symbol }}
-              </span>
-            </div>
-            <div v-if="isError" class="text-sm text-red-600">Такой тикер уже добавлен</div>
-          </div>
-        </div>
-        <button
-          @click="addTicker"
-          type="button"
-          class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-        >
-          <!-- Heroicon name: solid/mail -->
-          <svg
-            class="-ml-0.5 mr-2 h-6 w-6"
-            xmlns="http://www.w3.org/2000/svg"
-            width="30"
-            height="30"
-            viewBox="0 0 24 24"
-            fill="#ffffff"
-          >
-            <path
-              d="M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zm-1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"
-            ></path>
-          </svg>
-          Добавить
-        </button>
         <div>
           <hr class="w-full border-t border-gray-600 my-4" />
           <button
