@@ -1,18 +1,14 @@
 <script setup>
-import { ref, onMounted, watch, computed, nextTick } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { subscribeTicker, unsubscribeTicker } from './api';
 import AddTickerVue from './components/AddTicker.vue';
+import AddGraphVue from './components/AddGraph.vue';
 
 const tickersCountOnPage = 6;
-const minHeightBar = 5;
 
 const selectedTicker = ref(null);
 
 const graph = ref(null);
-const maxCountBarsOfGraph = ref(5);
-const barWrapper = ref(null);
-const barItem = ref([]);
-let barItemWidth = 0;
 
 const tickers = ref([]);
 const filter = ref('');
@@ -20,19 +16,6 @@ const filter = ref('');
 const page = ref(1);
 const isError = ref(false);
 let id = 0;
-
-const calculateMaxCountBarsOfGraph = () => {
-  maxCountBarsOfGraph.value = Math.ceil(barWrapper.value.offsetWidth / barItemWidth);
-};
-
-const getMaxNumberOfGraphValues = () => {
-  if (graph.value.length > maxCountBarsOfGraph.value) {
-    graph.value = graph.value.slice(
-      graph.value.length - maxCountBarsOfGraph.value,
-      graph.value.length
-    );
-  }
-};
 
 const formatPrice = (price) => {
   if (!price) {
@@ -54,14 +37,6 @@ const updatePrice = async (name, price, isEmpty = false) => {
 
   if (selectedTicker.value !== null && name === selectedTicker.value.name) {
     graph.value.push(price);
-    getMaxNumberOfGraphValues();
-
-    await nextTick().then(() => {
-      if (barWrapper.value && barItem.value.length > 0 && barItemWidth === 0) {
-        barItemWidth = barItem.value.at(0).offsetWidth;
-        calculateMaxCountBarsOfGraph();
-      }
-    });
   }
 
   currentTicker.isEmpty = false;
@@ -100,32 +75,13 @@ const removeTicker = (ticker) => {
 
 const select = async (ticker) => {
   selectedTicker.value = ticker;
-
-  await nextTick().then(() => {
-    if (barItemWidth !== 0) calculateMaxCountBarsOfGraph();
-  });
 };
 
-const removeSelectedTicker = () => {
+const unselect = () => {
   selectedTicker.value = null;
-  barItemWidth = 0;
-};
+}
 
 // a computed refs
-const normalizedGraph = computed(() => {
-  const minValue = Math.min(...graph.value);
-  const maxValue = Math.max(...graph.value);
-
-  if (maxValue === minValue) {
-    return graph.value.map(() => 50);
-  }
-
-  return graph.value.map((value) => {
-    const result = 5 + ((value - minValue) / (maxValue - minValue)) * 95;
-    return isNaN(result) ? minHeightBar : result;
-  });
-});
-
 const startIndex = computed(() => (page.value - 1) * tickersCountOnPage);
 
 const endIndex = computed(() => page.value * tickersCountOnPage);
@@ -153,13 +109,6 @@ const pageOptionsValue = computed(() => {
 
 onMounted(async () => {
   tickers.value = JSON.parse(window.localStorage.getItem('tickers')) || [];
-
-  window.addEventListener('resize', () => {
-    if (barWrapper.value && barItemWidth !== 0 && selectedTicker.value !== null) {
-      calculateMaxCountBarsOfGraph();
-      getMaxNumberOfGraphValues();
-    }
-  });
 
   if (tickers.value.length > 0) {
     tickers.value.forEach((ticker) => {
@@ -276,46 +225,11 @@ watch(paginatedTickers, () => {
         </dl>
       </template>
 
-      <template v-if="selectedTicker">
-        <hr class="w-full border-t border-gray-600 my-4" />
-        <section class="relative">
-          <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
-            {{ selectedTicker.name }} - USD
-          </h3>
-          <div class="flex items-end border-gray-600 border-b border-l h-64" ref="barWrapper">
-            <div
-              v-for="bar in normalizedGraph"
-              :key="bar.id"
-              :style="{ height: bar + '%' }"
-              ref="barItem"
-              class="bg-purple-800 border w-10"
-            ></div>
-          </div>
-          <button @click="removeSelectedTicker" type="button" class="absolute top-0 right-0">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              xmlns:xlink="http://www.w3.org/1999/xlink"
-              xmlns:svgjs="http://svgjs.com/svgjs"
-              version="1.1"
-              width="30"
-              height="30"
-              x="0"
-              y="0"
-              viewBox="0 0 511.76 511.76"
-              style="enable-background: new 0 0 512 512"
-              xml:space="preserve"
-            >
-              <g>
-                <path
-                  d="M436.896,74.869c-99.84-99.819-262.208-99.819-362.048,0c-99.797,99.819-99.797,262.229,0,362.048    c49.92,49.899,115.477,74.837,181.035,74.837s131.093-24.939,181.013-74.837C536.715,337.099,536.715,174.688,436.896,74.869z     M361.461,331.317c8.341,8.341,8.341,21.824,0,30.165c-4.16,4.16-9.621,6.251-15.083,6.251c-5.461,0-10.923-2.091-15.083-6.251    l-75.413-75.435l-75.392,75.413c-4.181,4.16-9.643,6.251-15.083,6.251c-5.461,0-10.923-2.091-15.083-6.251    c-8.341-8.341-8.341-21.845,0-30.165l75.392-75.413l-75.413-75.413c-8.341-8.341-8.341-21.845,0-30.165    c8.32-8.341,21.824-8.341,30.165,0l75.413,75.413l75.413-75.413c8.341-8.341,21.824-8.341,30.165,0    c8.341,8.32,8.341,21.824,0,30.165l-75.413,75.413L361.461,331.317z"
-                  fill="#718096"
-                  data-original="#000000"
-                ></path>
-              </g>
-            </svg>
-          </button>
-        </section>
-      </template>
+      <add-graph-vue 
+        v-if="selectedTicker" 
+        :graphValues="graph" 
+        :tickerName="selectedTicker.name"
+        @unselectedTicker="unselect" />
     </div>
   </div>
 </template>
